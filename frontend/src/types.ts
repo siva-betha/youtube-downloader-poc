@@ -44,3 +44,42 @@ export interface DownloadProgress {
 }
 
 export type AppState = 'idle' | 'analyzing' | 'ready' | 'downloading' | 'completed' | 'error';
+
+// ─── Channel Types ────────────────────────────────────────────────────────────
+
+export interface ChannelVideoItem {
+  id: string;
+  title: string;
+  url: string;
+  thumbnail?: string | null;
+  duration?: number | null;
+  duration_formatted?: string | null;
+  view_count?: number | null;
+  upload_date?: string | null;
+}
+
+export interface ChannelInfo {
+  channel_id: string;
+  channel_name: string;
+  channel_url: string;
+  thumbnail?: string | null;
+  video_count: number;
+  videos: ChannelVideoItem[];
+}
+
+/** Quality preset labels shown in the channel browser UI */
+export type QualityPreset = 'best' | '1080p' | '720p' | '480p' | '360p' | 'audio';
+
+/** Download mode chosen by the user before bulk download starts */
+export type DownloadMode = 'sequential' | 'parallel';
+
+/** Per-video state inside the download queue */
+export interface ChannelDownloadItem {
+  video: ChannelVideoItem;
+  qualityOverride: QualityPreset | null; // null = use global quality
+  jobId: string | null;
+  status: 'pending' | JobStatus;
+  progress: number;
+  error?: string | null;
+  fileUrl?: string | null;
+}

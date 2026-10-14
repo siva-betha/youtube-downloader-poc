@@ -20,28 +20,47 @@ export const DownloadProgress: React.FC<DownloadProgressProps> = ({
   onReset,
 }) => {
   const isCompleted = progress.status === 'completed';
-  const isFailed = progress.status === 'failed';
+  const isFailed    = progress.status === 'failed';
   const isProcessing = progress.status === 'processing';
+  const isDownloading = progress.status === 'downloading';
+
+  // Phase label comes through the `eta` field from the backend
+  const phaseLabels = ['Downloading video\u2026', 'Downloading audio\u2026', 'Merging streams\u2026'];
+  const isPhaseLabel = progress.eta ? phaseLabels.some(l => progress.eta?.startsWith(l.slice(0, 12))) : false;
+
+  const titleText = isCompleted
+    ? 'Download Ready'
+    : isFailed
+    ? 'Download Failed'
+    : isProcessing
+    ? 'Merging Streams\u2026'
+    : progress.eta === 'Downloading audio\u2026'
+    ? 'Downloading Audio Stream (2/2)'
+    : progress.progress > 0
+    ? 'Downloading Video Stream (1/2)'
+    : 'Starting Download\u2026';
+
+  // Progress bar colour: red (video) → blue (audio) → amber (merge) → green (done)
+  const barColour = isCompleted
+    ? 'bg-emerald-500'
+    : isFailed
+    ? 'bg-red-500'
+    : isProcessing
+    ? 'bg-amber-500'
+    : progress.eta === 'Downloading audio\u2026'
+    ? 'bg-gradient-to-r from-blue-600 to-cyan-500'
+    : 'bg-gradient-to-r from-red-600 to-rose-500';
 
   return (
     <div className="space-y-6 p-6 bg-slate-800/60 rounded-2xl border border-slate-700/80 shadow-xl">
       <div className="flex items-center justify-between">
+        {/* Title */}
         <h3 className="text-base font-semibold text-slate-100 flex items-center gap-2">
-          {isCompleted && <CheckCircle className="w-5 h-5 text-emerald-400" />}
+          {isCompleted  && <CheckCircle className="w-5 h-5 text-emerald-400" />}
           {isProcessing && <Loader2 className="w-5 h-5 text-amber-400 animate-spin" />}
-          {!isCompleted && !isProcessing && !isFailed && (
-            <Download className="w-5 h-5 text-red-400 animate-bounce" />
-          )}
-          {isFailed && <AlertCircle className="w-5 h-5 text-red-400" />}
-          <span>
-            {isCompleted
-              ? 'Download Ready'
-              : isProcessing
-              ? 'Processing Media (FFmpeg)...'
-              : isFailed
-              ? 'Download Encountered an Error'
-              : 'Downloading Media...'}
-          </span>
+          {isDownloading && <Download className="w-5 h-5 text-red-400 animate-bounce" />}
+          {isFailed     && <AlertCircle className="w-5 h-5 text-red-400" />}
+          <span>{titleText}</span>
         </h3>
 
         <span
@@ -67,15 +86,7 @@ export const DownloadProgress: React.FC<DownloadProgressProps> = ({
         </div>
         <div className="h-3 w-full bg-slate-950 rounded-full overflow-hidden p-0.5 border border-slate-800">
           <div
-            className={`h-full rounded-full transition-all duration-300 ${
-              isCompleted
-                ? 'bg-emerald-500'
-                : isProcessing
-                ? 'bg-amber-500'
-                : isFailed
-                ? 'bg-red-500'
-                : 'bg-gradient-to-r from-red-600 to-rose-500'
-            }`}
+            className={`h-full rounded-full transition-all duration-500 ${barColour}`}
             style={{ width: `${Math.max(progress.progress, 4)}%` }}
           />
         </div>
@@ -98,17 +109,15 @@ export const DownloadProgress: React.FC<DownloadProgressProps> = ({
           </div>
         )}
 
-        {progress.eta && !isProcessing && !isCompleted && (
+        {/* Phase / ETA */}
+        {!isCompleted && !isFailed && (
           <div>
-            <span className="text-slate-400 block text-[11px]">ETA</span>
-            <span className="font-semibold text-slate-100">{progress.eta}</span>
-          </div>
-        )}
-
-        {isProcessing && (
-          <div className="col-span-2 sm:col-span-1">
-            <span className="text-amber-400 block text-[11px]">Status</span>
-            <span className="font-semibold text-amber-200">Merging streams...</span>
+            <span className="text-slate-400 block text-[11px]">
+              {isProcessing ? 'Status' : isPhaseLabel ? 'Phase' : 'ETA'}
+            </span>
+            <span className={`font-semibold ${isProcessing ? 'text-amber-200' : 'text-slate-100'}`}>
+              {isProcessing ? 'Merging streams\u2026' : progress.eta || '\u2014'}
+            </span>
           </div>
         )}
       </div>

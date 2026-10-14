@@ -2,7 +2,7 @@ import logging
 from typing import Any, Dict, List, Optional
 import yt_dlp
 
-from app.models import FormatInfo, VideoInfoResponse
+from app.models import ChannelInfoResponse, ChannelVideoItem, FormatInfo, VideoInfoResponse
 
 logger = logging.getLogger(__name__)
 
@@ -71,20 +71,23 @@ class YouTubeService:
         video_by_resolution: Dict[str, FormatInfo] = {}
 
         # Scan for best video formats per resolution
+        # Track (FormatInfo, is_mp4) to prioritize MP4 container for instant, zero-transcode merging
+        video_candidates: Dict[str, tuple[FormatInfo, bool]] = {}
+
         for f in formats:
             # Check if format has video stream
             vcodec = f.get("vcodec", "none")
             height = f.get("height")
-            ext = f.get("ext", "mp4")
+            ext = f.get("ext", "")
+            is_mp4 = (ext == "mp4")
 
             if vcodec and vcodec != "none" and height and isinstance(height, int) and height >= 144:
                 res_label = f"{height}p"
                 format_id = str(f.get("format_id", ""))
-                filesize = f.get("filesize") or f.get("filesize_approx")
+                filesize = f.get("filesize") or f.get("filesize_approx") or 0
                 fps = f.get("fps")
 
-                # Prefer mp4 container or higher filesize / better format
-                current_candidate = FormatInfo(
+                candidate = FormatInfo(
                     format_id=format_id,
                     extension="mp4",
                     resolution=res_label,
@@ -93,13 +96,19 @@ class YouTubeService:
                     type="video",
                 )
 
-                if res_label not in video_by_resolution:
-                    video_by_resolution[res_label] = current_candidate
+                if res_label not in video_candidates:
+                    video_candidates[res_label] = (candidate, is_mp4)
                 else:
-                    # Update if current is mp4 and existing is not, or higher filesize
-                    existing = video_by_resolution[res_label]
-                    if ext == "mp4" and (filesize or 0) >= (existing.filesize or 0):
-                        video_by_resolution[res_label] = current_candidate
+                    existing_cand, existing_is_mp4 = video_candidates[res_label]
+                    existing_size = existing_cand.filesize or 0
+
+                    # Prefer native MP4 streams over WebM for instant stream-copy merging
+                    if is_mp4 and not existing_is_mp4:
+                        video_candidates[res_label] = (candidate, is_mp4)
+                    elif (is_mp4 == existing_is_mp4) and (filesize > existing_size):
+                        video_candidates[res_label] = (candidate, is_mp4)
+
+        video_by_resolution = {res: cand for res, (cand, _) in video_candidates.items()}
 
         # Sort video resolutions from highest to lowest
         sorted_resolutions = sorted(
@@ -112,7 +121,7 @@ class YouTubeService:
 
         # Find best audio format
         best_audio_filesize = None
-        best_audio_id = "bestaudio"
+        best_audio_id = "bestaudio[ext=m4a]/bestaudio"
         for f in formats:
             acodec = f.get("acodec", "none")
             vcodec = f.get("vcodec", "none")
@@ -134,3 +143,82 @@ class YouTubeService:
         )
 
         return result
+
+    @staticmethod
+    def extract_channel_info(url: str, max_videos: Optional[int] = 20) -> ChannelInfoResponse:
+        """Fetch channel metadata and a flat list of its videos using yt-dlp."""
+        ydl_opts = {
+            "quiet": True,
+            "no_warnings": True,
+            "extract_flat": True,       # Fast: list entries without downloading each page
+            "skip_download": True,
+            "socket_timeout": 30,
+            "playlistend": max_videos,  # Limit entries fetched; None = all
+        }
+
+        try:
+            logger.info("Extracting channel info for URL: %s (max_videos=%s)", url, max_videos)
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                info_dict = ydl.extract_info(url, download=False)
+        except Exception as e:
+            logger.error("Failed to extract channel info for %s: %s", url, str(e))
+            raise RuntimeError(f"Unable to retrieve channel information: {str(e)}") from e
+
+        if not info_dict:
+            raise RuntimeError("Unable to retrieve channel information: empty metadata returned")
+
+        channel_id = str(info_dict.get("channel_id") or info_dict.get("id") or "")
+        channel_name = str(
+            info_dict.get("channel")
+            or info_dict.get("uploader")
+            or info_dict.get("title")
+            or "Unknown Channel"
+        )
+        channel_url = str(info_dict.get("channel_url") or info_dict.get("uploader_url") or url)
+        channel_thumbnail = info_dict.get("thumbnail")
+
+        raw_entries = info_dict.get("entries") or []
+
+        videos: List[ChannelVideoItem] = []
+        for entry in raw_entries:
+            if not entry:
+                continue
+            vid_id = str(entry.get("id") or "")
+            if not vid_id:
+                continue
+
+            vid_title = str(entry.get("title") or "Untitled")
+            vid_url = entry.get("url") or entry.get("webpage_url") or f"https://www.youtube.com/watch?v={vid_id}"
+
+            # Ensure it's an absolute URL
+            if not vid_url.startswith("http"):
+                vid_url = f"https://www.youtube.com/watch?v={vid_id}"
+
+            duration = entry.get("duration")
+            duration_fmt = format_duration(int(duration)) if duration else None
+            thumbnail = entry.get("thumbnail") or entry.get("thumbnails")
+            if isinstance(thumbnail, list) and thumbnail:
+                # Pick last (usually highest-res)
+                thumbnail = thumbnail[-1].get("url") if isinstance(thumbnail[-1], dict) else None
+
+            videos.append(
+                ChannelVideoItem(
+                    id=vid_id,
+                    title=vid_title,
+                    url=vid_url,
+                    thumbnail=thumbnail,
+                    duration=int(duration) if duration else None,
+                    duration_formatted=duration_fmt,
+                    view_count=entry.get("view_count"),
+                    upload_date=str(entry.get("upload_date") or ""),
+                )
+            )
+
+        return ChannelInfoResponse(
+            channel_id=channel_id,
+            channel_name=channel_name,
+            channel_url=channel_url,
+            thumbnail=channel_thumbnail,
+            video_count=len(videos),
+            videos=videos,
+        )

@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
 from app.models import HealthResponse
-from app.routes import download, video
+from app.routes import channel, download, video
 from app.services.download_service import download_service
 
 # Setup logging
@@ -74,6 +74,7 @@ app.add_middleware(
 # Register routers
 app.include_router(video.router)
 app.include_router(download.router)
+app.include_router(channel.router)
 
 
 @app.get(

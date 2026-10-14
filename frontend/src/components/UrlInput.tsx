@@ -15,13 +15,16 @@ export const UrlInput: React.FC<UrlInputProps> = ({ onAnalyze, isLoading, initia
     e.preventDefault();
     const trimmed = url.trim();
     if (!trimmed) {
-      setValidationError('Please enter a YouTube video URL.');
+      setValidationError('Please enter a YouTube URL.');
       return;
     }
 
-    const youtubeRegex = /^(https?:\/\/)?(www\.|m\.|music\.)?(youtube\.com\/(watch\?v=|shorts\/|embed\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})([?&].*)?$/;
-    if (!youtubeRegex.test(trimmed)) {
-      setValidationError('Please enter a valid YouTube URL (e.g. youtube.com/watch?v=... or youtu.be/...)');
+    // Accept both video URLs and channel URLs
+    const videoRegex = /^(https?:\/\/)?(www\.|m\.|music\.)?(youtube\.com\/(watch\?v=|shorts\/|embed\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})([?&].*)?$/;
+    const channelRegex = /^(https?:\/\/)?(www\.)?youtube\.com\/(@[a-zA-Z0-9_.-]+|channel\/[a-zA-Z0-9_-]+|c\/[a-zA-Z0-9_.-]+|user\/[a-zA-Z0-9_.-]+)(\/.*)?$/;
+
+    if (!videoRegex.test(trimmed) && !channelRegex.test(trimmed)) {
+      setValidationError('Please enter a valid YouTube video URL or channel URL (e.g. youtube.com/@handle)');
       return;
     }
 
@@ -44,7 +47,7 @@ export const UrlInput: React.FC<UrlInputProps> = ({ onAnalyze, isLoading, initia
               if (validationError) setValidationError(null);
             }}
             disabled={isLoading}
-            placeholder="Paste YouTube video or shorts URL here..."
+            placeholder="Paste a YouTube video URL or channel URL…"
             className="w-full pl-12 pr-12 py-3.5 bg-slate-800/80 border border-slate-700/80 rounded-xl text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent transition-all shadow-inner text-sm md:text-base disabled:opacity-60 disabled:cursor-not-allowed"
           />
           {url && !isLoading && (
@@ -75,7 +78,7 @@ export const UrlInput: React.FC<UrlInputProps> = ({ onAnalyze, isLoading, initia
             {isLoading ? (
               <>
                 <Loader2 className="w-4 h-4 animate-spin" />
-                <span>Analyzing Video...</span>
+                <span>Analyzing…</span>
               </>
             ) : (
               <>

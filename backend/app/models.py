@@ -8,6 +8,20 @@ YOUTUBE_URL_REGEX = re.compile(
     r"^(https?://)?(www\.|m\.|music\.)?(youtube\.com/(watch\?v=|shorts/|embed/)|youtu\.be/)([a-zA-Z0-9_-]{11})([?&].*)?$"
 )
 
+YOUTUBE_CHANNEL_URL_REGEX = re.compile(
+    r"^(https?://)?(www\.)?youtube\.com/(@[a-zA-Z0-9_.-]+|channel/[a-zA-Z0-9_-]+|c/[a-zA-Z0-9_.-]+|user/[a-zA-Z0-9_.-]+)(/.*)?$"
+)
+
+
+def detect_url_type(url: str) -> str:
+    """Return 'video', 'channel', or 'unknown' for the given URL."""
+    clean = url.strip()
+    if YOUTUBE_URL_REGEX.match(clean):
+        return "video"
+    if YOUTUBE_CHANNEL_URL_REGEX.match(clean):
+        return "channel"
+    return "unknown"
+
 
 class VideoInfoRequest(BaseModel):
     url: str = Field(..., description="YouTube video URL to analyze")
@@ -21,6 +35,44 @@ class VideoInfoRequest(BaseModel):
         if not YOUTUBE_URL_REGEX.match(clean_url):
             raise ValueError("Invalid YouTube URL. Supported formats: youtube.com/watch?v=..., youtu.be/..., youtube.com/shorts/...")
         return clean_url
+
+
+class ChannelInfoRequest(BaseModel):
+    url: str = Field(..., description="YouTube channel URL")
+    max_videos: Optional[int] = Field(default=20, ge=1, le=500, description="Max videos to fetch (1-500). None = all.")
+
+    @field_validator("url")
+    @classmethod
+    def validate_channel_url(cls, v: str) -> str:
+        clean_url = v.strip()
+        if not clean_url:
+            raise ValueError("URL cannot be empty")
+        if not YOUTUBE_CHANNEL_URL_REGEX.match(clean_url):
+            raise ValueError(
+                "Invalid YouTube channel URL. Supported formats: youtube.com/@handle, "
+                "youtube.com/channel/UC..., youtube.com/c/name"
+            )
+        return clean_url
+
+
+class ChannelVideoItem(BaseModel):
+    id: str
+    title: str
+    url: str
+    thumbnail: Optional[str] = None
+    duration: Optional[int] = None
+    duration_formatted: Optional[str] = None
+    view_count: Optional[int] = None
+    upload_date: Optional[str] = None  # YYYYMMDD string from yt-dlp
+
+
+class ChannelInfoResponse(BaseModel):
+    channel_id: str
+    channel_name: str
+    channel_url: str
+    thumbnail: Optional[str] = None
+    video_count: int
+    videos: List[ChannelVideoItem]
 
 
 class FormatInfo(BaseModel):

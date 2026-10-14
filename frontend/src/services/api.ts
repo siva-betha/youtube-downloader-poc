@@ -1,4 +1,4 @@
-import { DownloadJobResponse, DownloadPayload, DownloadProgress, VideoInfo } from '../types';
+import { ChannelInfo, DownloadJobResponse, DownloadPayload, DownloadProgress, VideoInfo } from '../types';
 
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000').replace(/\/+$/, '');
 
@@ -48,6 +48,26 @@ export const api = {
    */
   async getVideoInfo(url: string): Promise<VideoInfo> {
     return apiFetch<VideoInfo>('/api/video/info', {
+      method: 'POST',
+      body: JSON.stringify({ url }),
+    });
+  },
+
+  /**
+   * Fetch channel metadata and flat list of videos
+   */
+  async getChannelInfo(url: string, maxVideos: number | null): Promise<ChannelInfo> {
+    return apiFetch<ChannelInfo>('/api/channel/info', {
+      method: 'POST',
+      body: JSON.stringify({ url, max_videos: maxVideos }),
+    });
+  },
+
+  /**
+   * Auto-detect whether a URL is a 'video', 'channel', or 'unknown'
+   */
+  async detectUrlType(url: string): Promise<{ url: string; url_type: 'video' | 'channel' | 'unknown' }> {
+    return apiFetch('/api/url/detect', {
       method: 'POST',
       body: JSON.stringify({ url }),
     });
